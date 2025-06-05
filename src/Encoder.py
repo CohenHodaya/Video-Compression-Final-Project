@@ -51,10 +51,10 @@ def SplitVideoToFrames(video_path, output_folder):
     print(f"הסרטון חולק בהצלחה ל-{frame_count} פריימים בתיקייה: {output_folder}")
 
 if __name__ == "__main__":
-    video_file = rf"C:\Users\user1\Videos\video1\אבן נשברת.mp4" #rf"C:\Users\user1\Downloads\nn.mp4" # input("אנא הזן את הנתיב המלא של קובץ הווידאו: ")
-    output_directory = r"C:\Users\user1\Pictures\try9" #input("אנא הזן את הנתיב של התיקייה שבה תרצה לשמור את הפריימים: ")
+    video_file =rf"C:\Users\user1\Videos\video1\אבן נשברת.mp4"#rf"C:\Users\user1\PycharmProjects\FrameInterpolationModel\src\my_video_h264.mp4"  #rf"C:\Users\user1\Downloads\nn.mp4" # input("אנא הזן את הנתיב המלא של קובץ הווידאו: ")
+    output_directory = r"C:\Users\user1\Pictures\tryTry" #input("אנא הזן את הנתיב של התיקייה שבה תרצה לשמור את הפריימים: ")
     SplitVideoToFrames(video_file, output_directory)
-    RemovingFrames(output_directory)
+    #RemovingFrames(output_directory)
 
 #לסדר את כמות הפרימים בסרטון ארוך
 #לסדר את הראשון והאחרון

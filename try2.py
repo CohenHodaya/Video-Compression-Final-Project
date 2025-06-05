@@ -98,8 +98,8 @@ def train_model():
     x = np.concatenate([x[:, 0], x[:, 1]], axis=-1)
 
     model = build_advanced_cnn(x.shape[1:])
-    model.fit(x, y, epochs=50, batch_size=8, validation_split=0.2, callbacks=[
-        tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+    model.fit(x, y, epochs=300, batch_size=32, validation_split=0.2, callbacks=[
+        tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=30, restore_best_weights=True)
     ])
     return model
 r"""
