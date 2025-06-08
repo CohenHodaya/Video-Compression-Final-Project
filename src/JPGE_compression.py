@@ -1,11 +1,14 @@
 """
 חלק 1: טעינת תמונה והמרת צבע
 """
-
+import sys
+sys.path.append(rf"C:\Users\user1\PycharmProjects\Image_segmentation")
 import numpy as np
 import cv2
 from scipy.fftpack import dct, idct
 import matplotlib.pyplot as plt
+from Image_segmentationTRY import segment_image
+
 
 from PIL import Image
 BLOCK_SIZE = 8
@@ -74,7 +77,7 @@ def ycbcr_to_rgb(image):
 חלק 2: חלוקת התמונה לבלוקים 8x8
 """
 
-def split_into_blocks(image, block_size=8):
+def split_into_blocks(image,mask, block_size=8):
     """חלוקת התמונה לבלוקים שאינם חופפים"""
     height, width = image.shape[:2]
 
@@ -85,8 +88,12 @@ def split_into_blocks(image, block_size=8):
     # הוספת רפידה בהתאם לצורך
     if len(image.shape) == 3:  # תמונה צבעונית
         padded_image = np.pad(image, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
+        padded_mask = np.pad(mask, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
+
     else:  # תמונה בגווני אפור
         padded_image = np.pad(image, ((0, pad_h), (0, pad_w)), mode='edge')
+        padded_mask = np.pad(mask, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
+
 
     print(f"Original size: {height}x{width}")
     print(f"Padded size: {padded_image.shape}")
@@ -94,23 +101,30 @@ def split_into_blocks(image, block_size=8):
 
     blocks = []
     block_positions = []  # לשמירת מיקום הבלוקים
-    print(blocks)
+    blocks_mask = []
+    block_positions_mask = []
 
     # חלוקה לבלוקים
     for i in range(0, padded_image.shape[0], block_size):
         for j in range(0, padded_image.shape[1], block_size):
             if len(image.shape) == 3:
                 block = padded_image[i:i+block_size, j:j+block_size, :]
+                block_mask = padded_mask[i:i+block_size, j:j+block_size, :]
             else:
                 block = padded_image[i:i+block_size, j:j+block_size]
+                block_mask = padded_mask[i:i+block_size, j:j+block_size]
+
 
             blocks.append(block)
             block_positions.append((i, j))
+            blocks_mask.append(block_mask)
+            block_positions_mask.append((i, j))
 
-    print(f"Total blocks created: {len(blocks)}")
+    print(f"Total blocks created: {len(blocks),len(blocks_mask)}")
     print(f"Each block size: {block_size}x{block_size}")
 
-    return blocks, padded_image.shape, block_positions
+    return blocks, padded_image.shape, block_positions, blocks_mask, padded_mask.shape, block_positions_mask
+# TODO לשחזור להוסיף כאן חלוקת מסכה לבלוקים
 
 def blocks_to_image(blocks, image_shape, block_size=8):
     """שחזור התמונה מהבלוקים"""
@@ -188,7 +202,7 @@ def apply_dct_to_blocks(blocks):
         dct_blocks.append(dct_block)
 
     return dct_blocks
-# TODO להוסיף כאן חלוקת מסכה לבלוקים
+
 def apply_idct_to_blocks(dct_blocks):
     """החלת DCT הפוך על כל הבלוקים"""
     reconstructed_blocks = []
@@ -445,6 +459,23 @@ def visualize_zigzag_pattern():
     plt.xlabel('Column')
     plt.ylabel('Row')
     plt.show()
+
+if __name__ == "__main__":
+    image_path =RF"C:\Users\user1\Pictures\2802.jpg"
+    mask_path = RF"C:\Users\user1\Pictures"
+    mask = segment_image(image_path,mask_path)
+    image = cv2.imread(image_path)  # קורא את התמונה כ-BGR
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    ycbcr_image = rgb_to_ycbcr(image)
+    print("YCbCr image shape:", ycbcr_image.shape)
+    blocks, padded_image_shape, block_positions, blocks_mask, padded_mask_shape, block_positions_mask = split_into_blocks(image, mask)
+    dct_blocks=apply_dct_to_blocks(blocks)
+    for i, block in enumerate(dct_blocks):
+        mask_block = blocks_mask[i]
+        if (np.all(mask_block == 0))
+
+
+
 
 # דוגמה לשימוש
 if __name__ == "__main__":
