@@ -78,33 +78,22 @@ def ycbcr_to_rgb(image):
 """
 
 def split_into_blocks(image,mask, block_size=8):
-    """חלוקת התמונה לבלוקים שאינם חופפים"""
     height, width = image.shape[:2]
-
-    # חישוב כמות הרפידה הנדרשת
     pad_h = (block_size - height % block_size) % block_size
     pad_w = (block_size - width % block_size) % block_size
-
-    # הוספת רפידה בהתאם לצורך
-    if len(image.shape) == 3:  # תמונה צבעונית
+    if len(image.shape) == 3:
         padded_image = np.pad(image, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
         padded_mask = np.pad(mask, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
-
-    else:  # תמונה בגווני אפור
+    else:
         padded_image = np.pad(image, ((0, pad_h), (0, pad_w)), mode='edge')
         padded_mask = np.pad(mask, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
-
-
     print(f"Original size: {height}x{width}")
     print(f"Padded size: {padded_image.shape}")
     print(f"Padding added: {pad_h}x{pad_w}")
-
     blocks = []
-    block_positions = []  # לשמירת מיקום הבלוקים
+    block_positions = []
     blocks_mask = []
     block_positions_mask = []
-
-    # חלוקה לבלוקים
     for i in range(0, padded_image.shape[0], block_size):
         for j in range(0, padded_image.shape[1], block_size):
             if len(image.shape) == 3:
@@ -113,13 +102,10 @@ def split_into_blocks(image,mask, block_size=8):
             else:
                 block = padded_image[i:i+block_size, j:j+block_size]
                 block_mask = padded_mask[i:i+block_size, j:j+block_size]
-
-
             blocks.append(block)
             block_positions.append((i, j))
             blocks_mask.append(block_mask)
             block_positions_mask.append((i, j))
-
     print(f"Total blocks created: {len(blocks),len(blocks_mask)}")
     print(f"Each block size: {block_size}x{block_size}")
 
@@ -173,34 +159,27 @@ def visualize_blocks(image, num_blocks_to_show=9):
 """
 חלק 3: טרנספורמציית DCT (Discrete Cosine Transform)
 """
-def dct2(block):
-    """החלת DCT דו-מימדי על בלוק 8x8"""
-    return dct(dct(block.T, norm='ortho').T, norm='ortho')
 
 def idct2(block):
     """החלת DCT הפוך דו-מימדי על בלוק 8x8"""
     return idct(idct(block.T, norm='ortho').T, norm='ortho')
 
+
+def dct2(block):
+    return dct(dct(block.T, norm='ortho').T, norm='ortho')
 def apply_dct_to_blocks(blocks):
-    """החלת DCT על כל הבלוקים"""
     dct_blocks = []
 
     for i, block in enumerate(blocks):
-        if len(block.shape) == 3:  # בלוק צבעוני
+        if len(block.shape) == 3:
             dct_block = np.zeros_like(block, dtype=np.float32)
             for channel in range(block.shape[2]):
-                # הסטת הערכים למרכז סביב 0
                 shifted = block[:, :, channel].astype(np.float32) - 128
-                # החלת DCT
                 dct_block[:, :, channel] = dct2(shifted)
-        else:  # בלוק בגווני אפור
-            # הסטת הערכים למרכז סביב 0
+        else:
             shifted = block.astype(np.float32) - 128
-            # החלת DCT
             dct_block = dct2(shifted)
-
         dct_blocks.append(dct_block)
-
     return dct_blocks
 
 def apply_idct_to_blocks(dct_blocks):
@@ -312,10 +291,30 @@ QUANTIZATION_TABLE_C = np.array([
     [99, 99, 99, 99, 99, 99, 99, 99]
 ])
 
+def scale_quantization_table(base_table, quality):
+    if quality < 1:
+        quality = 1
+    elif quality > 100:
+        quality = 100
+
+    if quality < 50:
+        scale = 5000 / quality
+    else:
+        scale = 200 - 2 * quality
+
+    scaled_table = (base_table * scale / 100).round()
+    scaled_table = np.clip(scaled_table, 1, 255)
+    return scaled_table.astype(np.uint8)
+
+"""
 def quantize_block(dct_block, quantization_table, quality_factor=1):
-    """קוונטיזציה של בלוק DCT"""
     q_table = quantization_table * quality_factor
     return np.round(dct_block / q_table)
+"""
+def quantize_block(dct_block, quantization_table):
+    q_table = np.where(quantization_table == 0, 1, quantization_table)
+    return np.round(dct_block / q_table).astype(np.int32)
+
 
 def dequantize_block(quantized_block, quantization_table, quality_factor=1):
     """ביטול קוונטיזציה"""
@@ -459,10 +458,109 @@ def visualize_zigzag_pattern():
     plt.xlabel('Column')
     plt.ylabel('Row')
     plt.show()
+import cv2
+import numpy as np
+"""
+def main(image_path, mask_path, quality_main=90, quality_bg=30):
+    # קריאת קבצים
+    image = cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2RGB)
+    mask = segment_image(image_path, mask_path)  # מחזירה מסכה עם 0/1
 
+    # המרה ל-YCbCr ופיצול ערוצים
+    ycbcr_image = rgb_to_ycbcr(image)
+    Y, Cb, Cr = ycbcr_image.transpose(2, 0, 1)
+
+    # טבלאות קוונטיזציה לפי איכות
+    tables = {
+        'Y_fg': scale_quantization_table(QUANTIZATION_TABLE_Y, quality_main),
+        'Y_bg': scale_quantization_table(QUANTIZATION_TABLE_Y, quality_bg),
+        'C_fg': scale_quantization_table(QUANTIZATION_TABLE_C, quality_main),
+        'C_bg': scale_quantization_table(QUANTIZATION_TABLE_C, quality_bg)
+    }
+
+    # פיצול ערוצים לבלוקים
+    def process_channel(channel, mask, table_fg, table_bg):
+        blocks, _, positions, mask_blocks, _, _ = split_into_blocks(channel, mask)
+        dct_blocks = apply_dct_to_blocks(blocks)
+
+        quantized = [
+            quantize_block(block, table_fg if np.any(mask_block) else table_bg)
+            for block, mask_block in zip(dct_blocks, mask_blocks)
+        ]
+        return quantized, positions
+
+    q_Y, pos_Y = process_channel(Y, mask, tables['Y_fg'], tables['Y_bg'])
+    q_Cb, pos_Cb = process_channel(Cb, mask, tables['C_fg'], tables['C_bg'])
+    q_Cr, pos_Cr = process_channel(Cr, mask, tables['C_fg'], tables['C_bg'])
+
+    print(f'כמות בלוקים מקוונטזים: Y={len(q_Y)}, Cb={len(q_Cb)}, Cr={len(q_Cr)}')
+
+    return q_Y, q_Cb, q_Cr, pos_Y
+    """
 if __name__ == "__main__":
-    image_path =RF"C:\Users\user1\Pictures\2802.jpg"
+    image_path = rf"C:\Users\user1\Pictures\28022.jpg"
     mask_path = RF"C:\Users\user1\Pictures"
+
+    # שלב 1: סגמנטציה וקריאת תמונה
+    mask = segment_image(image_path, mask_path)
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # המרה ל-YCbCr
+    ycbcr_image = rgb_to_ycbcr(image)
+
+    # חלוקה לבלוקים
+    blocks, padded_shape, positions, blocks_mask, _, _ = split_into_blocks(ycbcr_image, mask)
+
+    # DCT
+    dct_blocks = apply_dct_to_blocks(blocks)
+
+    # קוונטיזציה (עם איכות נמוכה לצורך הדגמה של אובדן)
+    q_table_Y = scale_quantization_table(QUANTIZATION_TABLE_Y, 10)
+    q_table_C = scale_quantization_table(QUANTIZATION_TABLE_C, 10)
+
+    quantized_blocks = []
+    for i, block in enumerate(dct_blocks):
+        mask_block = blocks_mask[i]
+        q_table = q_table_Y if np.all(mask_block == 0) else q_table_C
+        quantized_block = quantize_block(block, q_table)
+        quantized_blocks.append(quantized_block)
+
+    # שלב 2: שיחזור (iDCT)
+    dequantized_blocks = []
+    for i, block in enumerate(quantized_blocks):
+        mask_block = blocks_mask[i]
+        q_table = q_table_Y if np.all(mask_block == 0) else q_table_C
+        dequantized_block = dequantize_block(block, q_table)
+        dequantized_blocks.append(dequantized_block)
+
+    # החזרת בלוקים מהמרחב התדרי למרחב התמונה
+    reconstructed_blocks = apply_idct_to_blocks(dequantized_blocks)
+
+    # איחוד הבלוקים לתמונה שלמה
+    reconstructed_image = blocks_to_image(reconstructed_blocks, padded_shape)
+
+    # המרה חזרה ל-RGB (אם תרצה לשמור כתמונה)
+    reconstructed_rgb = ycbcr_to_rgb(reconstructed_image.astype(np.float32))
+    reconstructed_rgb = np.clip(reconstructed_rgb, 0, 255).astype(np.uint8)
+
+    # שמירה
+    save_path = image_path.replace(".jpg", "_reconstructed.jpg")
+    cv2.imwrite(save_path, cv2.cvtColor(reconstructed_rgb, cv2.COLOR_RGB2BGR))
+    print(f"✅ תמונה משוחזרת נשמרה ב: {save_path}")
+# דוגמה להרצה
+if __name__ == "__main__":
+    main(
+        image_path=r"C:\Users\user1\Pictures\2802.jpg",
+        mask_path=r"C:\Users\user1\Pictures"
+    )
+    #image_path =RF"C:\Users\user1\Pictures\2802.jpg"
+    #  mask_path = RF"C:\Users\user1\Pictures"
+
+
+"""
+  if __name__ == "__main__":
+
     mask = segment_image(image_path,mask_path)
     image = cv2.imread(image_path)  # קורא את התמונה כ-BGR
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -470,9 +568,16 @@ if __name__ == "__main__":
     print("YCbCr image shape:", ycbcr_image.shape)
     blocks, padded_image_shape, block_positions, blocks_mask, padded_mask_shape, block_positions_mask = split_into_blocks(image, mask)
     dct_blocks=apply_dct_to_blocks(blocks)
+    q_table_Y = scale_quantization_table(QUANTIZATION_TABLE_Y, 50)
+    q_table_C = scale_quantization_table(QUANTIZATION_TABLE_C, 50)
+    q_table_Y_10 = scale_quantization_table(QUANTIZATION_TABLE_Y, 10)
+    q_table_C_10 = scale_quantization_table(QUANTIZATION_TABLE_C, 10)
     for i, block in enumerate(dct_blocks):
         mask_block = blocks_mask[i]
         if (np.all(mask_block == 0))
+            quantize_ quantize_block(i[0],q_table_Y)
+  """
+
 
 
 
