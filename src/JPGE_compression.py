@@ -280,6 +280,7 @@ QUANTIZATION_TABLE_Y = np.array([
     [72, 92, 95, 98, 112, 100, 103, 99]
 ])
 
+
 QUANTIZATION_TABLE_C = np.array([
     [17, 18, 24, 47, 99, 99, 99, 99],
     [18, 21, 26, 66, 99, 99, 99, 99],
