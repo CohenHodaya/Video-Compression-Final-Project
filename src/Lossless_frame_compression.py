@@ -1,13 +1,8 @@
 import numpy as np
-import cv
-import sys
-import os
+import cv2
 from PIL import Image
 import matplotlib.pyplot as plt
-sys.path.append(rf"C:\Users\user1\PycharmProjects\Image_segmentation")
-from Image_segmentationTRY import segment_image
-#from segment import segment_image
-
+from Mask_creation import load_or_create_mask, prepare_mask_for_compression, is_block_black
 
 # === טבלאות קוונטיזציה ===
 
@@ -74,79 +69,6 @@ def create_quantization_tables(normal_quality=10, strong_quality=50):
 
 # === פונקציות עזר ===
 
-def Creating_a_mask(image_path, output_dir):
-    """יצירת מסכה באמצעות סגמנטציה"""
-    print("יוצר מסכה חדשה...")
-    mask_result = segment_image(image_path, output_dir)
-
-    # אם התוצאה היא Tensor, המר אותה לתמונה
-    if hasattr(mask_result, 'numpy'):  # זה Tensor
-        import torch
-        if isinstance(mask_result, torch.Tensor):
-            # המרה מ-Tensor לnumpy array
-            if mask_result.is_cuda:
-                mask_array = mask_result.cpu().numpy()
-            else:
-                mask_array = mask_result.numpy()
-
-            # אם יש ממד נוסף (batch), הסר אותו
-            if len(mask_array.shape) == 4:
-                mask_array = mask_array[0]
-
-            # אם יש 3 ממדים והראשון הוא channels, העבר אותו לאחרון
-            if len(mask_array.shape) == 3 and mask_array.shape[0] <= 4:
-                mask_array = np.transpose(mask_array, (1, 2, 0))
-
-            # המרה למסכה בינארית (0 או 255)
-            if mask_array.max() <= 1.0:
-                # אם הערכים בין 0-1, המר לבינארי
-                mask_array = (mask_array > 0.5).astype(np.uint8) * 255
-            else:
-                # אם הערכים כבר בטווח 0-255, המר לבינארי
-                mask_array = (mask_array > 128).astype(np.uint8) * 255
-
-            # וידוא שהמסכה היא grayscale
-            if len(mask_array.shape) == 3:
-                mask_array = np.mean(mask_array, axis=2).astype(np.uint8)
-                mask_array = (mask_array > 128).astype(np.uint8) * 255
-
-            # שמירת המסכה כקובץ
-            mask_path = os.path.join(output_dir, "generated_mask.jpg")
-            Image.fromarray(mask_array, mode='L').save(mask_path)
-            print(f"מסכה נשמרה ב: {mask_path}")
-            return mask_path
-
-    # אם זה נתיב קובץ, טען אותו ווודא שהוא בינארי
-    if isinstance(mask_result, str) and os.path.exists(mask_result):
-        mask_img = Image.open(mask_result).convert('L')
-        mask_array = np.array(mask_img)
-        # המרה לבינארי
-        mask_array = (mask_array > 128).astype(np.uint8) * 255
-        # שמירה חזרה
-        Image.fromarray(mask_array, mode='L').save(mask_result)
-        print(f"מסכה נשמרה ב: {mask_result}")
-        return mask_result
-
-    return mask_result
-
-def load_or_create_mask(image_path, output_dir, existing_mask_path=None):
-    """טעינת מסכה קיימת או יצירת מסכה חדשה"""
-    if existing_mask_path and os.path.exists(existing_mask_path):
-        print(f"טוען מסכה קיימת מ: {existing_mask_path}")
-        # טעינת המסכה הקיימת
-        mask_img = Image.open(existing_mask_path).convert('L')
-        mask_array = np.array(mask_img)
-        # וידוא שהמסכה בינארית
-        mask_array = (mask_array > 128).astype(np.uint8) * 255
-        return mask_array, existing_mask_path
-    else:
-        print("יוצר מסכה חדשה...")
-        # יצירת מסכה חדשה
-        mask_path = Creating_a_mask(image_path, output_dir)
-        mask_img = Image.open(mask_path).convert('L')
-        mask_array = np.array(mask_img)
-        return mask_array, mask_path
-
 def rgb_to_ycbcr(image):
     return cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
 
@@ -176,12 +98,6 @@ def blocks_to_image(blocks, original_shape, padded_shape, block_size=8):
             padded_image[i:i+block_size, j:j+block_size] = blocks[idx]
             idx += 1
     return padded_image[:original_shape[0], :original_shape[1]]
-
-def is_block_black(mask_block, threshold=128):
-    """בדיקה אם בלוק במסכה הוא כולו שחור (או רוב הפיקסלים שחורים)
-    במסכה בינארית: שחור = 0, לבן = 255
-    אם הערך הממוצע קטן מהסף - הבלוק נחשב שחור"""
-    return np.mean(mask_block) < threshold
 
 # === טרנספורמציית DCT ו-IDCT ===
 
@@ -317,69 +233,13 @@ def visualize_quantization_map(quantization_info, original_shape, padded_shape):
     quantization_map = blocks_to_image(quantization_blocks, original_shape, padded_shape)
     return quantization_map
 
-# === דוגמת שימוש ===
-
-if __name__ == "__main__":
-    # === הגדרות נתיבים - שנה כאן את הנתיבים שלך ===
-    image_path = rf"C:\Users\user1\Downloads\im1.png"  # נתיב התמונה
-    output_dir = rf"C:\Users\user1\Pictures\Masks"  # תיקיית פלט למסכות
-
-    # *** שנה את הנתיב הזה למסכה שלך או השאר None ליצירת מסכה חדשה ***
-    existing_mask_path = None  # rf"C:\path\to\your\mask.jpg"  # נתיב למסכה קיימת או None ליצירת מסכה חדשה
-
-    # === יצירת או טעינת מסכה ===
-    print("=== טיפול במסכה ===")
-
-    # טעינת התמונה המקורית
-    print("טוען תמונה מקורית...")
-    image = Image.open(image_path).convert("RGB")
-    image_np = np.array(image)
-    existing_mask_path = rf"C:\Users\user1\Pictures\Masks\im1.png"
-    # טעינת או יצירת מסכה
-    mask_np, mask_path = load_or_create_mask(image_path, output_dir, existing_mask_path)
-
-    # וידוא שהתמונה והמסכה באותו גודל
-    if image.size != (mask_np.shape[1], mask_np.shape[0]):
-        print(f"משנה גודל מסכה מ-{mask_np.shape} ל-{image.size}")
-        mask_pil = Image.fromarray(mask_np, mode='L')
-        mask_pil = mask_pil.resize(image.size)
-        mask_np = np.array(mask_pil)
-
-    # וידוא שהמסכה בינארית (0 או 255)
-    mask_np = (mask_np > 128).astype(np.uint8) * 255
-
-    print(f"גודל תמונה: {image_np.shape}")
-    print(f"גודל מסכה: {mask_np.shape}")
-    print(f"ערכים במסכה: min={mask_np.min()}, max={mask_np.max()}")
-
-    # === הגדרות דחיסה - שנה כאן את רמות הדחיסה ===
-    NORMAL_QUALITY = 70   # דחיסה רגילה (1-100, ככל שנמוך יותר - איכות טובה יותר)
-    STRONG_QUALITY = 45   # דחיסה חזקה (1-100, ככל שגבוה יותר - דחיסה חזקה יותר)
-
-    print(f"הגדרות דחיסה: רגילה={NORMAL_QUALITY}, חזקה={STRONG_QUALITY}")
-
-    # === דחיסה עם מסכה ===
-    print("\n=== דחיסה עם מסכה ===")
-    compressed, quantization_info = jpeg_compress_and_reconstruct_with_mask(
-        image_np, mask_np, NORMAL_QUALITY, STRONG_QUALITY
-    )
-
+def display_results(image_np, mask_np, compressed, quantization_info, normal_quality, strong_quality):
+    """הצגת התוצאות בצורה חזותית"""
     # יצירת מפת הקוונטיזציה
     print("יוצר מפת קוונטיזציה...")
     quantization_map = visualize_quantization_map(quantization_info[0], image_np.shape[:2], image_np.shape[:2])
 
-    # === שמירת תוצאות ===
-    print("\n=== שמירת תוצאות ===")
-    compressed_path = "compressed_with_mask.png"
-    quantization_map_path = "quantization_map.jpg"
-
-    Image.fromarray(compressed).save(compressed_path)
-    Image.fromarray(quantization_map).save(quantization_map_path)
-
-    print(f"תמונה דחוסה נשמרה ב: {compressed_path}")
-    print(f"מפת קוונטיזציה נשמרה ב: {quantization_map_path}")
-
-    # === הצגת תוצאות ===
+    # הצגת תוצאות
     print("\n=== הצגת תוצאות ===")
     plt.figure(figsize=(15, 10))
 
@@ -419,7 +279,10 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    # === סיכום סטטיסטיקות ===
+    return quantization_map
+
+def print_statistics(quantization_info, normal_quality, strong_quality):
+    """הדפסת סטטיסטיקות על הדחיסה"""
     print("\n=== סיכום ===")
 
     # סטטיסטיקות ערוץ Y
@@ -438,18 +301,13 @@ if __name__ == "__main__":
     total_blocks_cr = len(quantization_info[2])
 
     print(f"ערוץ Y - סה\"כ בלוקים: {total_blocks_y}")
-    print(f"  דחיסה חזקה (איכות {STRONG_QUALITY}): {strong_blocks_y} ({strong_blocks_y/total_blocks_y*100:.1f}%)")
-    print(f"  דחיסה רגילה (איכות {NORMAL_QUALITY}): {normal_blocks_y} ({normal_blocks_y/total_blocks_y*100:.1f}%)")
+    print(f"  דחיסה חזקה (איכות {strong_quality}): {strong_blocks_y} ({strong_blocks_y/total_blocks_y*100:.1f}%)")
+    print(f"  דחיסה רגילה (איכות {normal_quality}): {normal_blocks_y} ({normal_blocks_y/total_blocks_y*100:.1f}%)")
 
     print(f"\nערוץ Cb - סה\"כ בלוקים: {total_blocks_cb}")
-    print(f"  דחיסה חזקה (איכות {STRONG_QUALITY}): {strong_blocks_cb} ({strong_blocks_cb/total_blocks_cb*100:.1f}%)")
-    print(f"  דחיסה רגילה (איכות {NORMAL_QUALITY}): {normal_blocks_cb} ({normal_blocks_cb/total_blocks_cb*100:.1f}%)")
+    print(f"  דחיסה חזקה (איכות {strong_quality}): {strong_blocks_cb} ({strong_blocks_cb/total_blocks_cb*100:.1f}%)")
+    print(f"  דחיסה רגילה (איכות {normal_quality}): {normal_blocks_cb} ({normal_blocks_cb/total_blocks_cb*100:.1f}%)")
 
     print(f"\nערוץ Cr - סה\"כ בלוקים: {total_blocks_cr}")
-    print(f"  דחיסה חזקה (איכות {STRONG_QUALITY}): {strong_blocks_cr} ({strong_blocks_cr/total_blocks_cr*100:.1f}%)")
-    print(f"  דחיסה רגילה (איכות {NORMAL_QUALITY}): {normal_blocks_cr} ({normal_blocks_cr/total_blocks_cr*100:.1f}%)")
-
-    print(f"\nמסכה נטענה מ: {mask_path}")
-    print("נשמרו קבצים:")
-    print(f"- {compressed_path}")
-    print(f"- {quantization_map_path}")
+    print(f"  דחיסה חזקה (איכות {strong_quality}): {strong_blocks_cr} ({strong_blocks_cr/total_blocks_cr*100:.1f}%)")
+    print(f"  דחיסה רגילה (איכות {normal_quality}): {normal_blocks_cr} ({normal_blocks_cr/total_blocks_cr*100:.1f}%)")
