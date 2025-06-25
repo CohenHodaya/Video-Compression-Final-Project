@@ -1,6 +1,5 @@
 import cv2
 import os
-import os
 
 def list_files_in_directory(directory_path):
     """

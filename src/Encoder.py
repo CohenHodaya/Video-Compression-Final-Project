@@ -87,12 +87,12 @@ def renumber_frames(folder):
 
 if __name__ == "__main__":
     video_file =rf"C:\Users\user1\Videos\video1\אבן נשברת.mp4"#rf"C:\Users\user1\PycharmProjects\FrameInterpolationModel\src\my_video_h264.mp4"  #rf"C:\Users\user1\Downloads\nn.mp4" # input("אנא הזן את הנתיב המלא של קובץ הווידאו: ")
-    output_directory = r"C:\Users\user1\Pictures\Experiment_with_compression"
-    video_file_1 =rf"C:\Users\user1\Videos\video1\try__22.6.25.mp4"
+    output_directory = r"C:\Users\user1\Pictures\Experiment_with_compression_2025"
+    video_file_1 =rf"C:\Users\user1\Videos\video1\24.6.25.mp4"
     #input("אנא הזן את הנתיב של התיקייה שבה תרצה לשמור את הפריימים: ")
-    #SplitVideoToFrames(video_file, output_directory)
-    #RemovingFrames(output_directory)
-    #renumber_frames(output_directory)
+    SplitVideoToFrames(video_file, output_directory)
+    RemovingFrames(output_directory)
+    renumber_frames(output_directory)
     fpss = (get_video_fps(video_file))
     encode_video_h264(output_directory,video_file_1,fpss)
 #לסדר את כמות הפרימים בסרטון ארוך
